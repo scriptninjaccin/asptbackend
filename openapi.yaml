@@ -1,0 +1,1422 @@
+openapi: 3.0.3
+info:
+  title: Acharya Saryu Prasad Tripathi Intermediate College Portal API
+  version: 0.1.0
+  description: |
+    Initial backend API contract for the college portal.
+    This spec is aligned to the current frontend behavior and stub data.
+servers:
+  - url: http://localhost:8080/api
+    description: Local development
+  - url: https://api.example.com/api
+    description: Production (placeholder)
+tags:
+  - name: Public
+  - name: Admissions
+  - name: Fees
+  - name: Notices
+  - name: Students
+  - name: Gallery
+  - name: Admin
+
+security:
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [Public]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /classes:
+    get:
+      tags: [Public]
+      summary: Get class list
+      security: []
+      responses:
+        '200':
+          description: Available classes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  classes:
+                    type: array
+                    items:
+                      type: string
+                    example: [Class 1, Class 2, Class 3]
+
+  /fees/class-fees:
+    get:
+      tags: [Fees]
+      summary: Get class-wise fee table
+      security: []
+      responses:
+        '200':
+          description: Class-wise fee data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fees:
+                    type: object
+                    additionalProperties:
+                      $ref: '#/components/schemas/ClassFeeConfig'
+                  source:
+                    type: string
+                    example: api
+
+  /admissions/applications:
+    post:
+      tags: [Admissions]
+      summary: Submit new admission application (guest allowed)
+      security: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdmissionSubmitRequest'
+      responses:
+        '201':
+          description: Application submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdmissionApplication'
+        '409':
+          description: Duplicate student ID or existing pending application
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/admissions/applications:
+    get:
+      tags: [Admin, Admissions]
+      summary: List admission applications
+      description: Admin only.
+      parameters:
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/ApplicationStatus'
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Applications list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  applications:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdmissionApplication'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/admissions/applications/{applicationId}:
+    get:
+      tags: [Admin, Admissions]
+      summary: Get admission application
+      description: Admin only.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationIdParam'
+      responses:
+        '200':
+          description: Application details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdmissionApplication'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags: [Admin, Admissions]
+      summary: Update admission application
+      description: Admin only.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                studentId:
+                  type: string
+                studentName:
+                  type: string
+                fatherName:
+                  type: string
+                motherName:
+                  type: string
+                className:
+                  type: string
+                dob:
+                  type: string
+                  format: date
+                phone:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                address:
+                  type: string
+                documents:
+                  type: array
+                  items:
+                    type: string
+                status:
+                  $ref: '#/components/schemas/ApplicationStatus'
+                reviewedAt:
+                  type: string
+                  nullable: true
+                reviewedBy:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Application updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdmissionApplication'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Admin, Admissions]
+      summary: Delete admission application
+      description: Admin only. Soft delete.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationIdParam'
+      responses:
+        '200':
+          description: Application deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                  id:
+                    type: string
+                  deletedAt:
+                    type: string
+                    nullable: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/admissions/applications/{applicationId}/approve:
+    post:
+      tags: [Admin, Admissions]
+      summary: Approve admission application
+      description: Admin only. Creates student user account if not already present.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationIdParam'
+      responses:
+        '200':
+          description: Application approved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  application:
+                    $ref: '#/components/schemas/AdmissionApplication'
+                  createdStudent:
+                    $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/admissions/applications/{applicationId}/reject:
+    post:
+      tags: [Admin, Admissions]
+      summary: Reject admission application
+      description: Admin only.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationIdParam'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Application rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  application:
+                    $ref: '#/components/schemas/AdmissionApplication'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /notices/latest:
+    get:
+      tags: [Notices, Public]
+      summary: Get latest notices
+      security: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Latest notices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notices:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Notice'
+                  source:
+                    type: string
+                    example: api
+
+  /admin/notices:
+    post:
+      tags: [Admin, Notices]
+      summary: Create notice
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoticeCreateRequest'
+      responses:
+        '201':
+          description: Notice created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notice'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/notices/{noticeId}:
+    get:
+      tags: [Admin, Notices]
+      summary: Get notice
+      description: Admin only.
+      parameters:
+        - $ref: '#/components/parameters/NoticeIdParam'
+      responses:
+        '200':
+          description: Notice details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notice'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags: [Admin, Notices]
+      summary: Update notice
+      description: Admin only.
+      parameters:
+        - $ref: '#/components/parameters/NoticeIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoticeUpdateRequest'
+      responses:
+        '200':
+          description: Notice updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notice'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Admin, Notices]
+      summary: Delete notice
+      description: Admin only. Soft delete.
+      parameters:
+        - $ref: '#/components/parameters/NoticeIdParam'
+      responses:
+        '200':
+          description: Notice deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                  id:
+                    type: string
+                  deletedAt:
+                    type: string
+                    nullable: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /students/me:
+    get:
+      tags: [Students]
+      summary: Get current student profile and fee summary
+      responses:
+        '200':
+          description: Student profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  feeSummary:
+                    $ref: '#/components/schemas/FeeSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/students:
+    post:
+      tags: [Admin, Students]
+      summary: Create student
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '201':
+          description: Student created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '409':
+          description: Duplicate student
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    get:
+      tags: [Admin, Students]
+      summary: List/search students
+      parameters:
+        - in: query
+          name: className
+          schema:
+            type: string
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Students list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  students:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/students/{studentId}:
+    get:
+      tags: [Admin, Students]
+      summary: Get student
+      description: Admin only.
+      parameters:
+        - $ref: '#/components/parameters/StudentIdParam'
+      responses:
+        '200':
+          description: Student details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags: [Admin, Students]
+      summary: Update student
+      description: Admin only.
+      parameters:
+        - $ref: '#/components/parameters/StudentIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                studentName:
+                  type: string
+                fatherName:
+                  type: string
+                motherName:
+                  type: string
+                className:
+                  type: string
+                phone:
+                  type: string
+                email:
+                  type: string
+                address:
+                  type: string
+                monthlyFee:
+                  type: number
+                group:
+                  $ref: '#/components/schemas/UserGroup'
+      responses:
+        '200':
+          description: Student updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Admin, Students]
+      summary: Delete student
+      description: Admin only. Soft delete.
+      parameters:
+        - $ref: '#/components/parameters/StudentIdParam'
+      responses:
+        '200':
+          description: Student deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                  id:
+                    type: string
+                  deletedAt:
+                    type: string
+                    nullable: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/students/{studentId}/role:
+    patch:
+      tags: [Admin, Students]
+      summary: Update user role (dev/admin use)
+      parameters:
+        - $ref: '#/components/parameters/StudentIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [group]
+              properties:
+                group:
+                  $ref: '#/components/schemas/UserGroup'
+      responses:
+        '200':
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /fees/payments:
+    post:
+      tags: [Fees]
+      summary: Submit fee payment proof (QR/receipt flow)
+      security: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FeePaymentSubmitRequest'
+      responses:
+        '201':
+          description: Payment record(s) created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batchId:
+                    type: string
+                    example: PAY-948217
+                  records:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeePaymentRecord'
+
+  /fees/payments/me:
+    get:
+      tags: [Fees]
+      summary: Get logged-in student's fee payments and status
+      parameters:
+        - in: query
+          name: year
+          schema:
+            type: integer
+            example: 2026
+      responses:
+        '200':
+          description: Student fee payments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  records:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeePaymentRecord'
+                  summary:
+                    $ref: '#/components/schemas/FeeSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/fees/payments:
+    get:
+      tags: [Admin, Fees]
+      summary: List/search fee payment records
+      parameters:
+        - in: query
+          name: className
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/PaymentStatus'
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Fee records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  records:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FeePaymentRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/fees/payments/{paymentId}:
+    get:
+      tags: [Admin, Fees]
+      summary: Get payment
+      description: Admin only.
+      parameters:
+        - $ref: '#/components/parameters/PaymentIdParam'
+      responses:
+        '200':
+          description: Payment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeePaymentRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags: [Admin, Fees]
+      summary: Update payment
+      description: Admin only.
+      parameters:
+        - $ref: '#/components/parameters/PaymentIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                studentId:
+                  type: string
+                studentName:
+                  type: string
+                className:
+                  type: string
+                feeType:
+                  type: string
+                month:
+                  type: string
+                  nullable: true
+                paymentMode:
+                  type: string
+                method:
+                  type: string
+                transactionId:
+                  type: string
+                baseAmount:
+                  type: number
+                gatewayCharge:
+                  type: number
+                totalAmount:
+                  type: number
+                proof:
+                  type: string
+                receiptUrl:
+                  type: string
+                  nullable: true
+                status:
+                  $ref: '#/components/schemas/PaymentStatus'
+                verifiedAt:
+                  type: string
+                  nullable: true
+                verifiedBy:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Payment updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeePaymentRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Admin, Fees]
+      summary: Delete payment
+      description: Admin only. Soft delete.
+      parameters:
+        - $ref: '#/components/parameters/PaymentIdParam'
+      responses:
+        '200':
+          description: Payment deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                  id:
+                    type: string
+                  deletedAt:
+                    type: string
+                    nullable: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/fees/payments/{paymentId}/verify:
+    post:
+      tags: [Admin, Fees]
+      summary: Approve or reject fee payment
+      parameters:
+        - $ref: '#/components/parameters/PaymentIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [approved, rejected]
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Payment verification updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeePaymentRecord'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /gallery/media:
+    get:
+      tags: [Gallery, Public]
+      summary: Get gallery items
+      security: []
+      parameters:
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [photo, video]
+      responses:
+        '200':
+          description: Gallery list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GalleryItem'
+
+  /admin/gallery/media:
+    post:
+      tags: [Admin, Gallery]
+      summary: Upload gallery media item
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [type, file]
+              properties:
+                type:
+                  type: string
+                  enum: [photo, video]
+                title:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Gallery media created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryItem'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/gallery/media/{mediaId}:
+    get:
+      tags: [Admin, Gallery]
+      summary: Get gallery media
+      description: Admin only.
+      parameters:
+        - in: path
+          name: mediaId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Gallery media details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags: [Admin, Gallery]
+      summary: Update gallery media
+      description: Admin only.
+      parameters:
+        - in: path
+          name: mediaId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [photo, video]
+                title:
+                  type: string
+                caption:
+                  type: string
+                src:
+                  type: string
+      responses:
+        '200':
+          description: Gallery media updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    delete:
+      tags: [Admin, Gallery]
+      summary: Delete gallery media
+      description: Admin only. Soft delete.
+      parameters:
+        - in: path
+          name: mediaId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Gallery media deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+                  id:
+                    type: string
+                  deletedAt:
+                    type: string
+                    nullable: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /facilities:
+    get:
+      tags: [Public]
+      summary: Get facilities list
+      security: []
+      responses:
+        '200':
+          description: Facilities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  facilities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Facility'
+
+  /results/summary:
+    get:
+      tags: [Public]
+      summary: Get previous year result summary
+      security: []
+      responses:
+        '200':
+          description: Result summary data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ResultSummary'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ApplicationIdParam:
+      in: path
+      name: applicationId
+      required: true
+      schema:
+        type: string
+    NoticeIdParam:
+      in: path
+      name: noticeId
+      required: true
+      schema:
+        type: string
+    StudentIdParam:
+      in: path
+      name: studentId
+      required: true
+      schema:
+        type: string
+    PaymentIdParam:
+      in: path
+      name: paymentId
+      required: true
+      schema:
+        type: string
+
+  responses:
+    Unauthorized:
+      description: Authentication required or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    UserGroup:
+      type: string
+      enum: [admin, student]
+
+    ApplicationStatus:
+      type: string
+      enum: [pending, approved, rejected]
+
+    PaymentStatus:
+      type: string
+      enum: [pending, approved, rejected]
+
+    User:
+      type: object
+      properties:
+        studentId:
+          type: string
+        studentName:
+          type: string
+        fatherName:
+          type: string
+        motherName:
+          type: string
+        className:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        group:
+          $ref: '#/components/schemas/UserGroup'
+        monthlyFee:
+          type: number
+        deletedAt:
+          type: string
+          nullable: true
+
+    AdmissionSubmitRequest:
+      type: object
+      required:
+        - studentId
+        - studentName
+        - fatherName
+        - motherName
+        - className
+        - dob
+        - phone
+        - email
+        - address
+        - documents
+      properties:
+        studentId:
+          type: string
+        studentName:
+          type: string
+        fatherName:
+          type: string
+        motherName:
+          type: string
+        className:
+          type: string
+        dob:
+          type: string
+          format: date
+        phone:
+          type: string
+        email:
+          type: string
+          format: email
+        address:
+          type: string
+        documents:
+          type: array
+          items:
+            type: string
+            format: binary
+
+    AdmissionApplication:
+      type: object
+      properties:
+        id:
+          type: string
+        studentId:
+          type: string
+        studentName:
+          type: string
+        fatherName:
+          type: string
+        motherName:
+          type: string
+        className:
+          type: string
+        dob:
+          type: string
+          format: date
+        phone:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        documents:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        reviewedAt:
+          type: string
+          nullable: true
+        reviewedBy:
+          type: string
+          nullable: true
+        deletedAt:
+          type: string
+          nullable: true
+
+    ClassFeeConfig:
+      type: object
+      properties:
+        tuition:
+          type: number
+          example: 3500
+        admission:
+          type: number
+          example: 1750
+        exam:
+          type: number
+          example: 700
+
+    FeePaymentSubmitRequest:
+      type: object
+      required: [studentName, className, feeType, transactionId, proof]
+      properties:
+        studentId:
+          type: string
+          nullable: true
+        studentName:
+          type: string
+        className:
+          type: string
+        feeType:
+          type: string
+          enum: [tuition, admission, exam, miscellaneous]
+        selectedMonths:
+          type: array
+          items:
+            type: string
+            pattern: '^\\d{4}-\\d{2}$'
+        miscellaneousAmount:
+          type: number
+          nullable: true
+        miscellaneousDescription:
+          type: string
+          nullable: true
+        transactionId:
+          type: string
+        paymentMode:
+          type: string
+          enum: [upi]
+          default: upi
+        method:
+          type: string
+          example: UPI Manual
+        proof:
+          type: string
+          format: binary
+
+    FeePaymentRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        studentId:
+          type: string
+        studentName:
+          type: string
+        className:
+          type: string
+        feeType:
+          type: string
+        month:
+          type: string
+          nullable: true
+        paymentMode:
+          type: string
+          example: upi
+        method:
+          type: string
+          example: UPI Manual
+        transactionId:
+          type: string
+        baseAmount:
+          type: number
+        gatewayCharge:
+          type: number
+          example: 0
+        totalAmount:
+          type: number
+        proof:
+          type: string
+        receiptUrl:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        submittedAt:
+          type: string
+        verifiedAt:
+          type: string
+          nullable: true
+        verifiedBy:
+          type: string
+          nullable: true
+        deletedAt:
+          type: string
+          nullable: true
+
+    FeeSummary:
+      type: object
+      properties:
+        paidMonths:
+          type: integer
+        unpaidMonths:
+          type: integer
+        pendingVerification:
+          type: integer
+        totalPaidAmount:
+          type: number
+        totalDueAmount:
+          type: number
+
+    Notice:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        publishedAt:
+          type: string
+          format: date
+        deletedAt:
+          type: string
+          nullable: true
+
+    NoticeCreateRequest:
+      type: object
+      required: [title, body]
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        publishedAt:
+          type: string
+          format: date
+
+    NoticeUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        body:
+          type: string
+        publishedAt:
+          type: string
+          format: date
+
+    GalleryItem:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [photo, video]
+        title:
+          type: string
+        caption:
+          type: string
+        src:
+          type: string
+          format: uri
+        createdAt:
+          type: string
+        deletedAt:
+          type: string
+          nullable: true
+
+    Facility:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+
+    ResultSummary:
+      type: object
+      properties:
+        year:
+          type: string
+        passRate:
+          type: string
+        distinction:
+          type: integer
+        merit:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+
