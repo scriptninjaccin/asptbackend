@@ -10,6 +10,7 @@
                     "dev:local":  "tsx src/local/express.ts",
                     "start:local":  "npm run build \u0026\u0026 node dist/local/express.js",
                     "db:setup:local":  "node scripts/setup-local-dynamodb.js",
+                    "db:seed:local":  "node scripts/seed-local-data.js",
                     "smoke:local":  "node scripts/smoke-test.js"
                 },
     "dependencies":  {

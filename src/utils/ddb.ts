@@ -41,3 +41,6 @@ export const getFeePaymentsTable = (): string =>
 
 export const getGalleryTable = (): string =>
   process.env.DDB_TABLE_GALLERY ?? "gallery_media";
+
+export const getClassFeesTable = (): string =>
+  process.env.DDB_TABLE_CLASS_FEES ?? "class_fees";

@@ -2,10 +2,11 @@ import { GetCommand, PutCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib
 import { Handler } from "../types/lambda";
 import { FeePaymentRecord, FeeSummary } from "../types/contracts";
 import { getPathParam, getQuery, json, notFound, nowIso, parseJsonBody } from "../utils/http";
-import { getDdb, getFeePaymentsTable } from "../utils/ddb";
+import { getClassFeesTable, getDdb, getFeePaymentsTable } from "../utils/ddb";
 
 const ddb = getDdb();
 const tableName = getFeePaymentsTable();
+const classFeesTable = getClassFeesTable();
 const deletedAtField = "deletedAt";
 
 const asString = (value: unknown): string => (value === null || value === undefined ? "" : String(value));
@@ -46,15 +47,41 @@ const addNotDeletedFilter = (
   filters.push("(attribute_not_exists(#deletedAt) OR #deletedAt = :deletedAtNull)");
 };
 
-export const feesClassFeesGet: Handler = async () =>
-  json(200, {
+export const feesClassFeesGet: Handler = async () => {
+  try {
+    const response = await ddb.send(
+      new ScanCommand({
+        TableName: classFeesTable
+      })
+    );
+
+    const items = (response.Items ?? []) as Array<Record<string, unknown>>;
+    if (items.length) {
+      const fees = items.reduce<Record<string, { tuition: number; admission: number; exam: number }>>((acc, item) => {
+        const className = asString(item.className);
+        if (!className) return acc;
+        const tuition = asNumber(item.tuition, 0);
+        const admission = asNumber(item.admission, Math.round(tuition * 0.5));
+        const exam = asNumber(item.exam, Math.round(tuition * 0.2));
+        acc[className] = { tuition, admission, exam };
+        return acc;
+      }, {});
+
+      return json(200, { fees, source: "api" });
+    }
+  } catch {
+    // Fall through to fallback data.
+  }
+
+  return json(200, {
     fees: {
       "Class 1": { tuition: 3500, admission: 1750, exam: 700 },
       "Class 2": { tuition: 3600, admission: 1750, exam: 700 },
       "Class 3": { tuition: 3700, admission: 1750, exam: 700 }
     },
-    source: "api"
+    source: "fallback"
   });
+};
 
 export const feesPaymentsPost: Handler = async (event) => {
   const body = parseJsonBody(event);
