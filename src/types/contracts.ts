@@ -36,7 +36,11 @@ export interface AdmissionApplication {
   phone: string;
   email: string;
   address: string;
-  documents: string[];
+  documents: Array<{
+    name?: string;
+    type?: string;
+    url?: string;
+  }>;
   createdAt: string;
   status: ApplicationStatus;
   reviewedAt: string | null;
@@ -49,6 +53,12 @@ export interface Notice {
   title: string;
   body: string;
   publishedAt: string;
+  attachment?: {
+    name?: string;
+    type?: string;
+    dataUrl?: string;
+    url?: string;
+  } | null;
   deletedAt: string | null;
 }
 

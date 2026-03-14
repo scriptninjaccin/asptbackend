@@ -1,12 +1,16 @@
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { GetCommand, PutCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { Handler } from "../types/lambda";
 import { AdmissionApplication } from "../types/contracts";
 import { getPathParam, getQuery, json, notFound, nowIso, parseJsonBody } from "../utils/http";
 import { getAdmissionsTable, getDdb } from "../utils/ddb";
+import { getAdmissionsBucket, getAdmissionsPublicBaseUrl, getS3 } from "../utils/s3";
 
 const ddb = getDdb();
 const tableName = getAdmissionsTable();
 const deletedAtField = "deletedAt";
+const s3 = getS3();
 
 const normalizeStatus = (value: unknown): AdmissionApplication["status"] | undefined => {
   if (value === "pending" || value === "approved" || value === "rejected") {
@@ -18,8 +22,22 @@ const normalizeStatus = (value: unknown): AdmissionApplication["status"] | undef
 
 const asString = (value: unknown): string => (value === null || value === undefined ? "" : String(value));
 
-const asStringArray = (value: unknown): string[] =>
-  Array.isArray(value) ? value.map((entry) => asString(entry)) : [];
+const asDocumentArray = (value: unknown): AdmissionApplication["documents"] => {
+  if (!Array.isArray(value)) return [];
+  return value.map((entry) => {
+    if (typeof entry === "string") {
+      return { name: asString(entry) };
+    }
+    if (entry && typeof entry === "object") {
+      return {
+        name: asString((entry as Record<string, unknown>).name),
+        type: asString((entry as Record<string, unknown>).type),
+        url: asString((entry as Record<string, unknown>).url)
+      };
+    }
+    return { name: "" };
+  });
+};
 
 const buildUpdateExpression = (fields: Record<string, unknown>) => {
   const entries = Object.entries(fields);
@@ -66,7 +84,7 @@ export const admissionsApplicationsPost: Handler = async (event) => {
     phone: asString(body.phone),
     email: asString(body.email),
     address: asString(body.address),
-    documents: asStringArray(body.documents),
+    documents: asDocumentArray(body.documents),
     createdAt: nowIso(),
     status: "pending",
     reviewedAt: null,
@@ -170,7 +188,7 @@ export const adminAdmissionsApplicationsApplicationIdPatch: Handler = async (eve
   if ("phone" in body) fields.phone = asString(body.phone);
   if ("email" in body) fields.email = asString(body.email);
   if ("address" in body) fields.address = asString(body.address);
-  if ("documents" in body) fields.documents = asStringArray(body.documents);
+  if ("documents" in body) fields.documents = asDocumentArray(body.documents);
   if (status) fields.status = status;
   if ("reviewedAt" in body) fields.reviewedAt = body.reviewedAt === null ? null : asString(body.reviewedAt);
   if ("reviewedBy" in body) fields.reviewedBy = body.reviewedBy === null ? null : asString(body.reviewedBy);
@@ -330,4 +348,33 @@ export const adminAdmissionsApplicationsApplicationIdDelete: Handler = async (ev
 
     throw error;
   }
+};
+
+export const admissionsAttachmentsPresignPost: Handler = async (event) => {
+  const bucket = getAdmissionsBucket();
+  if (!bucket) {
+    return json(400, { message: "S3_ADMISSIONS_BUCKET is not configured", code: "S3_BUCKET_MISSING" });
+  }
+
+  const body = parseJsonBody(event);
+  const fileName = asString(body.name) || `admission-${Date.now()}`;
+  const contentType = asString(body.type) || "application/octet-stream";
+  const safeName = fileName.replace(/[^\w.\-]+/g, "_");
+  const key = `admissions/${Date.now()}-${safeName}`;
+
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType
+  });
+
+  const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 60 * 5 });
+  const publicBaseUrl = getAdmissionsPublicBaseUrl() || `https://${bucket}.s3.${process.env.AWS_REGION ?? "us-east-1"}.amazonaws.com`;
+  const publicUrl = `${publicBaseUrl.replace(/\/$/, "")}/${key}`;
+
+  return json(200, {
+    uploadUrl,
+    publicUrl,
+    key
+  });
 };

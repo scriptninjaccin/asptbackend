@@ -2,11 +2,15 @@ import { GetCommand, PutCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib
 import { Handler } from "../types/lambda";
 import { Notice } from "../types/contracts";
 import { getPathParam, getQuery, json, notFound, nowIso, parseJsonBody } from "../utils/http";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getDdb, getNoticesTable } from "../utils/ddb";
+import { getNoticeBucket, getNoticePublicBaseUrl, getS3 } from "../utils/s3";
 
 const ddb = getDdb();
 const tableName = getNoticesTable();
 const deletedAtField = "deletedAt";
+const s3 = getS3();
 
 const asString = (value: unknown): string => (value === null || value === undefined ? "" : String(value));
 
@@ -74,12 +78,22 @@ export const noticesLatestGet: Handler = async (event) => {
 export const adminNoticesPost: Handler = async (event) => {
   const body = parseJsonBody(event);
   const publishedAtRaw = asString(body.publishedAt);
+  const attachment =
+    body.attachment && typeof body.attachment === "object"
+      ? {
+          name: asString(body.attachment.name),
+          type: asString(body.attachment.type),
+          dataUrl: asString(body.attachment.dataUrl),
+          url: asString(body.attachment.url)
+        }
+      : null;
 
   const notice: Notice = {
     id: `N-${Date.now()}`,
     title: asString(body.title),
     body: asString(body.body),
     publishedAt: publishedAtRaw || nowIso().split("T")[0],
+    attachment,
     deletedAt: null
   };
 
@@ -136,6 +150,18 @@ export const adminNoticesNoticeIdPatch: Handler = async (event) => {
   if ("title" in body) fields.title = asString(body.title);
   if ("body" in body) fields.body = asString(body.body);
   if ("publishedAt" in body) fields.publishedAt = asString(body.publishedAt);
+  if ("attachment" in body) {
+    if (body.attachment === null) {
+      fields.attachment = null;
+    } else if (typeof body.attachment === "object") {
+      fields.attachment = {
+        name: asString(body.attachment.name),
+        type: asString(body.attachment.type),
+        dataUrl: asString(body.attachment.dataUrl),
+        url: asString(body.attachment.url)
+      };
+    }
+  }
 
   if (!Object.keys(fields).length) {
     return json(400, { message: "No fields to update", code: "NO_UPDATES" });
@@ -207,4 +233,33 @@ export const adminNoticesNoticeIdDelete: Handler = async (event) => {
 
     throw error;
   }
+};
+
+export const adminNoticesAttachmentsPresignPost: Handler = async (event) => {
+  const bucket = getNoticeBucket();
+  if (!bucket) {
+    return json(400, { message: "S3_NOTICES_BUCKET is not configured", code: "S3_BUCKET_MISSING" });
+  }
+
+  const body = parseJsonBody(event);
+  const fileName = asString(body.name) || `notice-${Date.now()}`;
+  const contentType = asString(body.type) || "application/octet-stream";
+  const safeName = fileName.replace(/[^\w.\-]+/g, "_");
+  const key = `notices/${Date.now()}-${safeName}`;
+
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType
+  });
+
+  const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 60 * 5 });
+  const publicBaseUrl = getNoticePublicBaseUrl() || `https://${bucket}.s3.${process.env.AWS_REGION ?? "us-east-1"}.amazonaws.com`;
+  const publicUrl = `${publicBaseUrl.replace(/\/$/, "")}/${key}`;
+
+  return json(200, {
+    uploadUrl,
+    publicUrl,
+    key
+  });
 };

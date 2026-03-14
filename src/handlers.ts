@@ -5,7 +5,8 @@ import {
   adminAdmissionsApplicationsApplicationIdPatch,
   adminAdmissionsApplicationsApplicationIdRejectPost,
   adminAdmissionsApplicationsGet,
-  admissionsApplicationsPost
+  admissionsApplicationsPost,
+  admissionsAttachmentsPresignPost
 } from "./lambdas/admissions";
 import {
   adminFeesPaymentsGet,
@@ -25,6 +26,7 @@ import {
   galleryMediaGet
 } from "./lambdas/gallery";
 import {
+  adminNoticesAttachmentsPresignPost,
   adminNoticesNoticeIdDelete,
   adminNoticesNoticeIdGet,
   adminNoticesNoticeIdPatch,
@@ -50,6 +52,7 @@ export {
   facilitiesGet,
   resultsSummaryGet,
   admissionsApplicationsPost,
+  admissionsAttachmentsPresignPost,
   adminAdmissionsApplicationsGet,
   adminAdmissionsApplicationsApplicationIdGet,
   adminAdmissionsApplicationsApplicationIdPatch,
@@ -58,6 +61,7 @@ export {
   adminAdmissionsApplicationsApplicationIdRejectPost,
   noticesLatestGet,
   adminNoticesPost,
+  adminNoticesAttachmentsPresignPost,
   adminNoticesNoticeIdGet,
   adminNoticesNoticeIdPatch,
   adminNoticesNoticeIdDelete,
@@ -89,6 +93,7 @@ export const routeDefs: RouteDef[] = [
   { method: "GET", path: "/facilities", handler: facilitiesGet },
   { method: "GET", path: "/results/summary", handler: resultsSummaryGet },
   { method: "POST", path: "/admissions/applications", handler: admissionsApplicationsPost },
+  { method: "POST", path: "/admissions/attachments/presign", handler: admissionsAttachmentsPresignPost },
   { method: "GET", path: "/admin/admissions/applications", handler: adminAdmissionsApplicationsGet },
   { method: "GET", path: "/admin/admissions/applications/:applicationId", handler: adminAdmissionsApplicationsApplicationIdGet },
   { method: "PATCH", path: "/admin/admissions/applications/:applicationId", handler: adminAdmissionsApplicationsApplicationIdPatch },
@@ -105,6 +110,7 @@ export const routeDefs: RouteDef[] = [
   },
   { method: "GET", path: "/notices/latest", handler: noticesLatestGet },
   { method: "POST", path: "/admin/notices", handler: adminNoticesPost },
+  { method: "POST", path: "/admin/notices/attachments/presign", handler: adminNoticesAttachmentsPresignPost },
   { method: "GET", path: "/admin/notices/:noticeId", handler: adminNoticesNoticeIdGet },
   { method: "PATCH", path: "/admin/notices/:noticeId", handler: adminNoticesNoticeIdPatch },
   { method: "DELETE", path: "/admin/notices/:noticeId", handler: adminNoticesNoticeIdDelete },
